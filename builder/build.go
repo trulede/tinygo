@@ -217,18 +217,26 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 	var packageJobs []*compileJob
 	packageActionIDJobs := make(map[string]*compileJob)
 
+	if config.Options.GlobalValues == nil {
+		config.Options.GlobalValues = make(map[string]map[string]string)
+	}
 	if config.Options.GlobalValues["runtime"]["buildVersion"] == "" {
 		version := goenv.Version
 		if strings.HasSuffix(goenv.Version, "-dev") && goenv.GitSha1 != "" {
 			version += "-" + goenv.GitSha1
 		}
-		if config.Options.GlobalValues == nil {
-			config.Options.GlobalValues = make(map[string]map[string]string)
-		}
 		if config.Options.GlobalValues["runtime"] == nil {
 			config.Options.GlobalValues["runtime"] = make(map[string]string)
 		}
 		config.Options.GlobalValues["runtime"]["buildVersion"] = version
+	}
+	if config.TestConfig.CompileTestBinary {
+		// The testing.testBinary is set to "1" when in a test.
+		// This is needed for testing.Testing() to work correctly.
+		if config.Options.GlobalValues["testing"] == nil {
+			config.Options.GlobalValues["testing"] = make(map[string]string)
+		}
+		config.Options.GlobalValues["testing"]["testBinary"] = "1"
 	}
 
 	var embedFileObjects []*compileJob
@@ -1052,17 +1060,6 @@ func optimizeProgram(mod llvm.Module, config *compileopts.Config) error {
 	err = setGlobalValues(mod, config.Options.GlobalValues)
 	if err != nil {
 		return err
-	}
-
-	// Browsers cannot handle external functions that have type i64 because it
-	// cannot be represented exactly in JavaScript (JS only has doubles). To
-	// keep functions interoperable, pass int64 types as pointers to
-	// stack-allocated values.
-	if config.WasmAbi() == "js" {
-		err := transform.ExternalInt64AsPtr(mod, config)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Optimization levels here are roughly the same as Clang, but probably not

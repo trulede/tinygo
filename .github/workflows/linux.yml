@@ -18,7 +18,7 @@ jobs:
     # statically linked binary.
     runs-on: ubuntu-latest
     container:
-      image: golang:1.20-alpine
+      image: golang:1.21-alpine
     steps:
       - name: Install apk dependencies
         # tar: needed for actions/cache@v3
@@ -135,7 +135,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.20'
+          go-version: '1.21'
           cache: true
       - name: Install wasmtime
         run: |
@@ -153,6 +153,7 @@ jobs:
           tar -C ~/lib -xf tinygo.linux-amd64.tar.gz
           ln -s ~/lib/tinygo/bin/tinygo ~/go/bin/tinygo
       - run: make tinygo-test-wasi-fast
+      - run: make tinygo-test-wasip1-fast
       - run: make smoketest
   assert-test-linux:
     # Run all tests that can run on Linux, with LLVM assertions enabled to catch
@@ -177,12 +178,12 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.20'
+          go-version: '1.21'
           cache: true
       - name: Install Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '14'
+          node-version: '16'
       - name: Install wasmtime
         run: |
           mkdir -p $HOME/.wasmtime $HOME/.wasmtime/bin
@@ -290,7 +291,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.20'
+          go-version: '1.21'
           cache: true
       - name: Restore LLVM source cache
         uses: actions/cache/restore@v3
@@ -407,7 +408,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.20'
+          go-version: '1.21'
           cache: true
       - name: Restore LLVM source cache
         uses: actions/cache/restore@v3

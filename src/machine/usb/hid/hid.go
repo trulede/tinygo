@@ -4,6 +4,7 @@ import (
 	"errors"
 	"machine"
 	"machine/usb"
+	"machine/usb/descriptor"
 )
 
 // from usb-hid.go
@@ -22,7 +23,8 @@ const (
 )
 
 type hidDevicer interface {
-	Handler() bool
+	TxHandler() bool
+	RxHandler([]byte) bool
 }
 
 var devices [5]hidDevicer
@@ -32,19 +34,50 @@ var size int
 // calls machine.EnableHID for USB configuration
 func SetHandler(d hidDevicer) {
 	if size == 0 {
-		machine.EnableHID(handler, nil, setupHandler)
+		machine.ConfigureUSBEndpoint(descriptor.CDCHID,
+			[]usb.EndpointConfig{
+				{
+					Index:     usb.HID_ENDPOINT_OUT,
+					IsIn:      false,
+					Type:      usb.ENDPOINT_TYPE_INTERRUPT,
+					RxHandler: rxHandler,
+				},
+				{
+					Index:     usb.HID_ENDPOINT_IN,
+					IsIn:      true,
+					Type:      usb.ENDPOINT_TYPE_INTERRUPT,
+					TxHandler: txHandler,
+				},
+			},
+			[]usb.SetupConfig{
+				{
+					Index:   usb.HID_INTERFACE,
+					Handler: setupHandler,
+				},
+			})
 	}
 
 	devices[size] = d
 	size++
 }
 
-func handler() {
+func txHandler() {
 	for _, d := range devices {
 		if d == nil {
 			continue
 		}
-		if done := d.Handler(); done {
+		if done := d.TxHandler(); done {
+			return
+		}
+	}
+}
+
+func rxHandler(b []byte) {
+	for _, d := range devices {
+		if d == nil {
+			continue
+		}
+		if done := d.RxHandler(b); done {
 			return
 		}
 	}

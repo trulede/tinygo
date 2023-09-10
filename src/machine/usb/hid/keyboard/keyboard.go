@@ -81,12 +81,19 @@ func newKeyboard() *keyboard {
 	}
 }
 
-func (kb *keyboard) Handler() bool {
+func (kb *keyboard) TxHandler() bool {
 	kb.waitTxc = false
 	if b, ok := kb.buf.Get(); ok {
 		kb.waitTxc = true
 		hid.SendUSBPacket(b)
 		return true
+	}
+	return false
+}
+
+func (kb *keyboard) RxHandler(b []byte) bool {
+	if len(b) >= 2 && b[0] == 2 /* ReportID */ {
+		kb.led = b[1]
 	}
 	return false
 }
@@ -100,6 +107,18 @@ func (kb *keyboard) tx(b []byte) {
 			hid.SendUSBPacket(b)
 		}
 	}
+}
+
+func (kb *keyboard) NumLockLed() bool {
+	return kb.led&1 != 0
+}
+
+func (kb *keyboard) CapsLockLed() bool {
+	return kb.led&2 != 0
+}
+
+func (kb *keyboard) ScrollLockLed() bool {
+	return kb.led&4 != 0
 }
 
 func (kb *keyboard) ready() bool {

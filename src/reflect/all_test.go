@@ -790,6 +790,8 @@ func TestFunctionValue(t *testing.T) {
 	assert(t, v.Type().String(), "func()")
 }
 
+*/
+
 func TestGrow(t *testing.T) {
 	v := ValueOf([]int(nil))
 	shouldPanic("reflect.Value.Grow using unaddressable value", func() { v.Grow(0) })
@@ -856,8 +858,6 @@ func TestGrow(t *testing.T) {
 		}
 	})
 }
-
-*/
 
 var appendTests = []struct {
 	orig, extra []int
@@ -1559,8 +1559,6 @@ func TestIsZero(t *testing.T) {
 			t.Errorf("%d: IsZero(Zero(TypeOf((%s)(%+v)))) is false", i, x.Kind(), tt.x)
 		}
 
-		/* // TODO(tinygo): missing SetZero support
-
 		p := New(x.Type()).Elem()
 		p.Set(x)
 		p.SetZero()
@@ -1568,7 +1566,6 @@ func TestIsZero(t *testing.T) {
 			t.Errorf("%d: IsZero((%s)(%+v)) is true after SetZero", i, p.Kind(), tt.x)
 
 		}
-		*/
 
 	}
 

@@ -47,13 +47,17 @@ func newMouse() *mouse {
 	}
 }
 
-func (m *mouse) Handler() bool {
+func (m *mouse) TxHandler() bool {
 	m.waitTxc = false
 	if b, ok := m.buf.Get(); ok {
 		m.waitTxc = true
 		hid.SendUSBPacket(b[:5])
 		return true
 	}
+	return false
+}
+
+func (m *mouse) RxHandler(b []byte) bool {
 	return false
 }
 

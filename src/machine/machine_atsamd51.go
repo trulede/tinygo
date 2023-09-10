@@ -1114,13 +1114,15 @@ func (uart *UART) SetBaudRate(br uint32) {
 }
 
 // WriteByte writes a byte of data to the UART.
-func (uart *UART) WriteByte(c byte) error {
+func (uart *UART) writeByte(c byte) error {
 	// wait until ready to receive
 	for !uart.Bus.INTFLAG.HasBits(sam.SERCOM_USART_INT_INTFLAG_DRE) {
 	}
 	uart.Bus.DATA.Set(uint32(c))
 	return nil
 }
+
+func (uart *UART) flush() {}
 
 func (uart *UART) handleInterrupt(interrupt.Interrupt) {
 	// should reset IRQ
@@ -1162,7 +1164,7 @@ const (
 	wireCmdStop        = 3
 )
 
-const i2cTimeout = 1000
+const i2cTimeout = 28000 // about 210us
 
 // Configure is intended to setup the I2C interface.
 func (i2c *I2C) Configure(config I2CConfig) error {
@@ -2296,4 +2298,53 @@ func checkFlashError() error {
 	}
 
 	return nil
+}
+
+// Watchdog provides access to the hardware watchdog available
+// in the SAMD51.
+var Watchdog = &watchdogImpl{}
+
+const (
+	// WatchdogMaxTimeout in milliseconds (16s)
+	WatchdogMaxTimeout = (16384 * 1000) / 1024 // CYC16384/1024kHz
+)
+
+type watchdogImpl struct{}
+
+// Configure the watchdog.
+//
+// This method should not be called after the watchdog is started and on
+// some platforms attempting to reconfigure after starting the watchdog
+// is explicitly forbidden / will not work.
+func (wd *watchdogImpl) Configure(config WatchdogConfig) error {
+	// 1.024kHz clock
+	cycles := int((int64(config.TimeoutMillis) * 1024) / 1000)
+
+	// period is expressed as a power-of-two, starting at 8 / 1024ths of a second
+	period := uint8(0)
+	cfgCycles := 8
+	for cfgCycles < cycles {
+		period++
+		cfgCycles <<= 1
+
+		if period >= 0xB {
+			break
+		}
+	}
+
+	sam.WDT.CONFIG.Set(period << sam.WDT_CONFIG_PER_Pos)
+
+	return nil
+}
+
+// Starts the watchdog.
+func (wd *watchdogImpl) Start() error {
+	sam.WDT.CTRLA.SetBits(sam.WDT_CTRLA_ENABLE)
+	return nil
+}
+
+// Update the watchdog, indicating that `source` is healthy.
+func (wd *watchdogImpl) Update() {
+	// 0xA5 = magic value (see datasheet)
+	sam.WDT.CLEAR.Set(0xA5)
 }

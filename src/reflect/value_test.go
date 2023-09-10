@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	. "reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -189,6 +190,24 @@ func TestTinyMap(t *testing.T) {
 
 	if _, ok := utIterKey.Interface().(unmarshalerText); !ok {
 		t.Errorf("Map keys via MapIter() have wrong type: %v", utIterKey.Type().String())
+	}
+
+	{
+		m := map[any]any{1: 2}
+		rv := ValueOf(m)
+		iter := rv.MapRange()
+
+		iter.Next()
+		k := iter.Key()
+		if k.Kind().String() != "interface" {
+			t.Errorf("map[any]any MapRange has wrong key type: %v", k.Kind().String())
+		}
+
+		keys := rv.MapKeys()
+		if k := keys[0]; k.Kind().String() != "interface" {
+			t.Errorf("map[any]any MapRange has wrong key type: %v", k.Kind().String())
+		}
+
 	}
 }
 
@@ -452,9 +471,19 @@ func TestTinyStruct(t *testing.T) {
 		t.Errorf("StrucTag for Foo=%v, want %v", got, want)
 	}
 
+	q, ok = reffb.FieldByNameFunc(func(s string) bool { return strings.ToLower(s) == "bar" })
+	if q.Name != "Bar" || !ok {
+		t.Errorf("FieldByNameFunc(bar)=%v,%v, want Bar, true", q.Name, ok)
+	}
+
 	q, ok = reffb.FieldByName("Snorble")
 	if q.Name != "" || ok {
 		t.Errorf("FieldByName(Snorble)=%v,%v, want ``, false", q.Name, ok)
+	}
+
+	q, ok = reffb.FieldByNameFunc(func(s string) bool { return strings.ToLower(s) == "snorble" })
+	if q.Name != "" || ok {
+		t.Errorf("FieldByName(snorble)=%v,%v, want ``, false", q.Name, ok)
 	}
 }
 
@@ -531,7 +560,7 @@ type methodStruct struct {
 	i int
 }
 
-func (m methodStruct) valueMethod1() int {
+func (m methodStruct) ValueMethod1() int {
 	return m.i
 }
 
@@ -539,11 +568,11 @@ func (m methodStruct) valueMethod2() int {
 	return m.i
 }
 
-func (m *methodStruct) pointerMethod1() int {
+func (m *methodStruct) PointerMethod1() int {
 	return m.i
 }
 
-func (m *methodStruct) pointerMethod2() int {
+func (m *methodStruct) PointerMethod2() int {
 	return m.i
 }
 
@@ -553,12 +582,12 @@ func (m *methodStruct) pointerMethod3() int {
 
 func TestTinyNumMethods(t *testing.T) {
 	refptrt := TypeOf(&methodStruct{})
-	if got, want := refptrt.NumMethod(), 2+3; got != want {
+	if got, want := refptrt.NumMethod(), 1+2; got != want {
 		t.Errorf("Pointer Methods=%v, want %v", got, want)
 	}
 
 	reft := refptrt.Elem()
-	if got, want := reft.NumMethod(), 2; got != want {
+	if got, want := reft.NumMethod(), 1; got != want {
 		t.Errorf("Value Methods=%v, want %v", got, want)
 	}
 }

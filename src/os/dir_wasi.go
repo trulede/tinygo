@@ -6,7 +6,7 @@
 // fairly similar: we use fdopendir, fdclosedir, and readdir from wasi-libc in
 // a similar way that the darwin code uses functions from libc.
 
-//go:build wasi
+//go:build wasi || wasip1
 
 package os
 
@@ -52,9 +52,6 @@ func (f *File) readdir(n int, mode readdirMode) (names []string, dirents []DirEn
 		}
 		if dirent == nil { // EOF
 			break
-		}
-		if dirent.Ino == 0 {
-			continue
 		}
 		name := dirent.Name()
 		// Check for useless names before allocating a string.

@@ -186,7 +186,7 @@ func (uart *UART) SetBaudRate(br uint32) {
 }
 
 // WriteByte writes a byte of data to the UART.
-func (uart *UART) WriteByte(c byte) error {
+func (uart *UART) writeByte(c byte) error {
 	nrf.UART0.EVENTS_TXDRDY.Set(0)
 	nrf.UART0.TXD.Set(uint32(c))
 	for nrf.UART0.EVENTS_TXDRDY.Get() == 0 {
@@ -194,12 +194,16 @@ func (uart *UART) WriteByte(c byte) error {
 	return nil
 }
 
+func (uart *UART) flush() {}
+
 func (uart *UART) handleInterrupt(interrupt.Interrupt) {
 	if nrf.UART0.EVENTS_RXDRDY.Get() != 0 {
 		uart.Receive(byte(nrf.UART0.RXD.Get()))
 		nrf.UART0.EVENTS_RXDRDY.Set(0x0)
 	}
 }
+
+const i2cTimeout = 0xffff // this is around 29ms on a nrf52
 
 // I2CConfig is used to store config info for I2C.
 type I2CConfig struct {
@@ -259,11 +263,17 @@ func (i2c *I2C) Configure(config I2CConfig) error {
 }
 
 // signalStop sends a stop signal to the I2C peripheral and waits for confirmation.
-func (i2c *I2C) signalStop() {
+func (i2c *I2C) signalStop() error {
+	tries := 0
 	i2c.Bus.TASKS_STOP.Set(1)
 	for i2c.Bus.EVENTS_STOPPED.Get() == 0 {
+		tries++
+		if tries >= i2cTimeout {
+			return errI2CSignalStopTimeout
+		}
 	}
 	i2c.Bus.EVENTS_STOPPED.Set(0)
+	return nil
 }
 
 var rngStarted = false

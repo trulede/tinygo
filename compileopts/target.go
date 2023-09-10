@@ -23,46 +23,45 @@ import (
 // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_target/spec/struct.TargetOptions.html
 // https://github.com/shepmaster/rust-arduino-blink-led-no-core-with-cargo/blob/master/blink/arduino.json
 type TargetSpec struct {
-	Inherits         []string `json:"inherits"`
-	Triple           string   `json:"llvm-target"`
-	CPU              string   `json:"cpu"`
-	ABI              string   `json:"target-abi"` // rougly equivalent to -mabi= flag
-	Features         string   `json:"features"`
-	GOOS             string   `json:"goos"`
-	GOARCH           string   `json:"goarch"`
-	BuildTags        []string `json:"build-tags"`
-	GC               string   `json:"gc"`
-	Scheduler        string   `json:"scheduler"`
-	Serial           string   `json:"serial"` // which serial output to use (uart, usb, none)
-	Linker           string   `json:"linker"`
-	RTLib            string   `json:"rtlib"` // compiler runtime library (libgcc, compiler-rt)
-	Libc             string   `json:"libc"`
-	AutoStackSize    *bool    `json:"automatic-stack-size"` // Determine stack size automatically at compile time.
-	DefaultStackSize uint64   `json:"default-stack-size"`   // Default stack size if the size couldn't be determined at compile time.
-	CFlags           []string `json:"cflags"`
-	LDFlags          []string `json:"ldflags"`
-	LinkerScript     string   `json:"linkerscript"`
-	ExtraFiles       []string `json:"extra-files"`
-	RP2040BootPatch  *bool    `json:"rp2040-boot-patch"` // Patch RP2040 2nd stage bootloader checksum
-	Emulator         string   `json:"emulator"`
-	FlashCommand     string   `json:"flash-command"`
-	GDB              []string `json:"gdb"`
-	PortReset        string   `json:"flash-1200-bps-reset"`
-	SerialPort       []string `json:"serial-port"` // serial port IDs in the form "vid:pid"
-	FlashMethod      string   `json:"flash-method"`
-	FlashVolume      []string `json:"msd-volume-name"`
-	FlashFilename    string   `json:"msd-firmware-name"`
-	UF2FamilyID      string   `json:"uf2-family-id"`
-	BinaryFormat     string   `json:"binary-format"`
-	OpenOCDInterface string   `json:"openocd-interface"`
-	OpenOCDTarget    string   `json:"openocd-target"`
-	OpenOCDTransport string   `json:"openocd-transport"`
-	OpenOCDCommands  []string `json:"openocd-commands"`
-	OpenOCDVerify    *bool    `json:"openocd-verify"` // enable verify when flashing with openocd
-	JLinkDevice      string   `json:"jlink-device"`
-	CodeModel        string   `json:"code-model"`
-	RelocationModel  string   `json:"relocation-model"`
-	WasmAbi          string   `json:"wasm-abi"`
+	Inherits         []string `json:"inherits,omitempty"`
+	Triple           string   `json:"llvm-target,omitempty"`
+	CPU              string   `json:"cpu,omitempty"`
+	ABI              string   `json:"target-abi,omitempty"` // rougly equivalent to -mabi= flag
+	Features         string   `json:"features,omitempty"`
+	GOOS             string   `json:"goos,omitempty"`
+	GOARCH           string   `json:"goarch,omitempty"`
+	BuildTags        []string `json:"build-tags,omitempty"`
+	GC               string   `json:"gc,omitempty"`
+	Scheduler        string   `json:"scheduler,omitempty"`
+	Serial           string   `json:"serial,omitempty"` // which serial output to use (uart, usb, none)
+	Linker           string   `json:"linker,omitempty"`
+	RTLib            string   `json:"rtlib,omitempty"` // compiler runtime library (libgcc, compiler-rt)
+	Libc             string   `json:"libc,omitempty"`
+	AutoStackSize    *bool    `json:"automatic-stack-size,omitempty"` // Determine stack size automatically at compile time.
+	DefaultStackSize uint64   `json:"default-stack-size,omitempty"`   // Default stack size if the size couldn't be determined at compile time.
+	CFlags           []string `json:"cflags,omitempty"`
+	LDFlags          []string `json:"ldflags,omitempty"`
+	LinkerScript     string   `json:"linkerscript,omitempty"`
+	ExtraFiles       []string `json:"extra-files,omitempty"`
+	RP2040BootPatch  *bool    `json:"rp2040-boot-patch,omitempty"` // Patch RP2040 2nd stage bootloader checksum
+	Emulator         string   `json:"emulator,omitempty"`
+	FlashCommand     string   `json:"flash-command,omitempty"`
+	GDB              []string `json:"gdb,omitempty"`
+	PortReset        string   `json:"flash-1200-bps-reset,omitempty"`
+	SerialPort       []string `json:"serial-port,omitempty"` // serial port IDs in the form "vid:pid"
+	FlashMethod      string   `json:"flash-method,omitempty"`
+	FlashVolume      []string `json:"msd-volume-name,omitempty"`
+	FlashFilename    string   `json:"msd-firmware-name,omitempty"`
+	UF2FamilyID      string   `json:"uf2-family-id,omitempty"`
+	BinaryFormat     string   `json:"binary-format,omitempty"`
+	OpenOCDInterface string   `json:"openocd-interface,omitempty"`
+	OpenOCDTarget    string   `json:"openocd-target,omitempty"`
+	OpenOCDTransport string   `json:"openocd-transport,omitempty"`
+	OpenOCDCommands  []string `json:"openocd-commands,omitempty"`
+	OpenOCDVerify    *bool    `json:"openocd-verify,omitempty"` // enable verify when flashing with openocd
+	JLinkDevice      string   `json:"jlink-device,omitempty"`
+	CodeModel        string   `json:"code-model,omitempty"`
+	RelocationModel  string   `json:"relocation-model,omitempty"`
 }
 
 // overrideProperties overrides all properties that are set in child into itself using reflection.
@@ -192,12 +191,15 @@ func LoadTarget(options *Options) (*TargetSpec, error) {
 			default:
 				return nil, fmt.Errorf("invalid GOARM=%s, must be 5, 6, or 7", options.GOARM)
 			}
+		case "wasm":
+			llvmarch = "wasm32"
 		default:
 			llvmarch = options.GOARCH
 		}
 		llvmvendor := "unknown"
 		llvmos := options.GOOS
-		if llvmos == "darwin" {
+		switch llvmos {
+		case "darwin":
 			// Use macosx* instead of darwin, otherwise darwin/arm64 will refer
 			// to iOS!
 			llvmos = "macosx10.12.0"
@@ -208,6 +210,8 @@ func LoadTarget(options *Options) (*TargetSpec, error) {
 				llvmos = "macosx11.0.0"
 			}
 			llvmvendor = "apple"
+		case "wasip1":
+			llvmos = "wasi"
 		}
 		// Target triples (which actually have four components, but are called
 		// triples for historical reasons) have the form:
@@ -278,6 +282,15 @@ func defaultTarget(goos, goarch, triple string) (*TargetSpec, error) {
 	case "arm64":
 		spec.CPU = "generic"
 		spec.Features = "+neon"
+	case "wasm":
+		spec.CPU = "generic"
+		spec.Features = "+bulk-memory,+nontrapping-fptoint,+sign-ext"
+		spec.BuildTags = append(spec.BuildTags, "tinygo.wasm")
+		spec.CFlags = append(spec.CFlags,
+			"-mbulk-memory",
+			"-mnontrapping-fptoint",
+			"-msign-ext",
+		)
 	}
 	if goos == "darwin" {
 		spec.Linker = "ld.lld"
@@ -320,6 +333,22 @@ func defaultTarget(goos, goarch, triple string) (*TargetSpec, error) {
 			"--gc-sections",
 			"--no-insert-timestamp",
 			"--no-dynamicbase",
+		)
+	} else if goos == "wasip1" {
+		spec.GC = "" // use default GC
+		spec.Scheduler = "asyncify"
+		spec.Linker = "wasm-ld"
+		spec.RTLib = "compiler-rt"
+		spec.Libc = "wasi-libc"
+		spec.DefaultStackSize = 1024 * 16 // 16kB
+		spec.LDFlags = append(spec.LDFlags,
+			"--stack-first",
+			"--no-demangle",
+		)
+		spec.Emulator = "wasmtime --mapdir=/tmp::{tmpDir} {}"
+		spec.ExtraFiles = append(spec.ExtraFiles,
+			"src/runtime/asm_tinygowasm.S",
+			"src/internal/task/task_asyncify_wasm.S",
 		)
 	} else {
 		spec.LDFlags = append(spec.LDFlags, "-no-pie", "-Wl,--gc-sections") // WARNING: clang < 5.0 requires -nopie

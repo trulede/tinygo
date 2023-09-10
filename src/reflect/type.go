@@ -360,7 +360,7 @@ type Type interface {
 	// and FieldByNameFunc returns no match.
 	// This behavior mirrors Go's handling of name lookup in
 	// structs containing embedded fields.
-	//FieldByNameFunc(match func(string) bool) (StructField, bool)
+	FieldByNameFunc(match func(string) bool) (StructField, bool)
 
 	// In returns the type of a function type's i'th input parameter.
 	// It panics if the type's Kind is not Func.
@@ -601,6 +601,18 @@ func (t *rawType) Kind() Kind {
 	return Kind(t.meta & kindMask)
 }
 
+var (
+	errTypeElem         = &TypeError{"Elem"}
+	errTypeKey          = &TypeError{"Key"}
+	errTypeField        = &TypeError{"Field"}
+	errTypeBits         = &TypeError{"Bits"}
+	errTypeLen          = &TypeError{"Len"}
+	errTypeNumField     = &TypeError{"NumField"}
+	errTypeChanDir      = &TypeError{"ChanDir"}
+	errTypeFieldByName  = &TypeError{"FieldByName"}
+	errTypeFieldByIndex = &TypeError{"FieldByIndex"}
+)
+
 // Elem returns the element type for channel, slice and array types, the
 // pointed-to value for pointer types, and the key type for map types.
 func (t *rawType) Elem() Type {
@@ -619,14 +631,14 @@ func (t *rawType) elem() *rawType {
 	case Chan, Slice, Array, Map:
 		return (*elemType)(unsafe.Pointer(underlying)).elem
 	default:
-		panic(&TypeError{"Elem"})
+		panic(errTypeElem)
 	}
 }
 
 func (t *rawType) key() *rawType {
 	underlying := t.underlying()
 	if underlying.Kind() != Map {
-		panic(&TypeError{"Key"})
+		panic(errTypeKey)
 	}
 	return (*mapType)(unsafe.Pointer(underlying)).key
 }
@@ -683,7 +695,7 @@ func rawStructFieldFromPointer(descriptor *structType, fieldType *rawType, data 
 // For internal use only.
 func (t *rawType) rawField(n int) rawStructField {
 	if t.Kind() != Struct {
-		panic(&TypeError{"Field"})
+		panic(errTypeField)
 	}
 	descriptor := (*structType)(unsafe.Pointer(t.underlying()))
 	if uint(n) >= uint(descriptor.numField) {
@@ -710,13 +722,13 @@ func (t *rawType) rawField(n int) rawStructField {
 	return rawStructFieldFromPointer(descriptor, field.fieldType, data, flagsByte, name, offset)
 }
 
-// rawFieldByName returns nearly the same value as FieldByName but without converting the
+// rawFieldByNameFunc returns nearly the same value as FieldByNameFunc but without converting the
 // Type member to an interface.
 //
 // For internal use only.
-func (t *rawType) rawFieldByName(n string) (rawStructField, []int, bool) {
+func (t *rawType) rawFieldByNameFunc(match func(string) bool) (rawStructField, []int, bool) {
 	if t.Kind() != Struct {
-		panic(&TypeError{"Field"})
+		panic(errTypeField)
 	}
 
 	type fieldWalker struct {
@@ -757,7 +769,7 @@ func (t *rawType) rawFieldByName(n string) (rawStructField, []int, bool) {
 
 				name := readStringZ(data)
 				data = unsafe.Add(data, len(name))
-				if name == n {
+				if match(name) {
 					found = append(found, result{
 						rawStructFieldFromPointer(descriptor, field.fieldType, data, flagsByte, name, offset),
 						append(ll.index, int(i)),
@@ -812,14 +824,14 @@ func (t *rawType) Bits() int {
 	if kind >= Int && kind <= Complex128 {
 		return int(t.Size()) * 8
 	}
-	panic(TypeError{"Bits"})
+	panic(errTypeBits)
 }
 
 // Len returns the number of elements in this array. It panics of the type kind
 // is not Array.
 func (t *rawType) Len() int {
 	if t.Kind() != Array {
-		panic(TypeError{"Len"})
+		panic(errTypeLen)
 	}
 
 	return int((*arrayType)(unsafe.Pointer(t.underlying())).arrayLen)
@@ -829,7 +841,7 @@ func (t *rawType) Len() int {
 // type kinds.
 func (t *rawType) NumField() int {
 	if t.Kind() != Struct {
-		panic(&TypeError{"NumField"})
+		panic(errTypeNumField)
 	}
 	return int((*structType)(unsafe.Pointer(t.underlying())).numField)
 }
@@ -973,7 +985,7 @@ func (t *rawType) isBinary() bool {
 
 func (t *rawType) ChanDir() ChanDir {
 	if t.Kind() != Chan {
-		panic(TypeError{"ChanDir"})
+		panic(errTypeChanDir)
 	}
 
 	dir := int((*elemType)(unsafe.Pointer(t)).numMethod)
@@ -1084,10 +1096,31 @@ func (t *rawType) PkgPath() string {
 
 func (t *rawType) FieldByName(name string) (StructField, bool) {
 	if t.Kind() != Struct {
-		panic(TypeError{"FieldByName"})
+		panic(errTypeFieldByName)
 	}
 
-	field, index, ok := t.rawFieldByName(name)
+	field, index, ok := t.rawFieldByNameFunc(func(n string) bool { return n == name })
+	if !ok {
+		return StructField{}, false
+	}
+
+	return StructField{
+		Name:      field.Name,
+		PkgPath:   field.PkgPath,
+		Type:      field.Type, // note: converts rawType to Type
+		Tag:       field.Tag,
+		Anonymous: field.Anonymous,
+		Offset:    field.Offset,
+		Index:     index,
+	}, true
+}
+
+func (t *rawType) FieldByNameFunc(match func(string) bool) (StructField, bool) {
+	if t.Kind() != Struct {
+		panic(TypeError{"FieldByNameFunc"})
+	}
+
+	field, index, ok := t.rawFieldByNameFunc(match)
 	if !ok {
 		return StructField{}, false
 	}
@@ -1110,7 +1143,7 @@ func (t *rawType) FieldByIndex(index []int) StructField {
 	for _, n := range index {
 		structOrPtrToStruct := ftype.Kind() == Struct || (ftype.Kind() == Pointer && ftype.elem().Kind() == Struct)
 		if !structOrPtrToStruct {
-			panic(&TypeError{"FieldByIndex:" + ftype.Kind().String()})
+			panic(errTypeFieldByIndex)
 		}
 
 		if ftype.Kind() == Pointer {

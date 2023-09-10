@@ -913,11 +913,12 @@ func (v Value) MapKeys() []Value {
 	k := New(v.typecode.Key())
 	e := New(v.typecode.Elem())
 
-	keyType := v.typecode.Key().(*rawType)
-	isKeyStoredAsInterface := keyType.Kind() != String && !keyType.isBinary()
+	keyType := v.typecode.key()
+	keyTypeIsEmptyInterface := keyType.Kind() == Interface && keyType.NumMethod() == 0
+	shouldUnpackInterface := !keyTypeIsEmptyInterface && keyType.Kind() != String && !keyType.isBinary()
 
 	for hashmapNext(v.pointer(), it, k.value, e.value) {
-		if isKeyStoredAsInterface {
+		if shouldUnpackInterface {
 			intf := *(*interface{})(k.value)
 			v := ValueOf(intf)
 			keys = append(keys, v)
@@ -992,12 +993,14 @@ func (v Value) MapRange() *MapIter {
 	}
 
 	keyType := v.typecode.key()
-	isKeyStoredAsInterface := keyType.Kind() != String && !keyType.isBinary()
+
+	keyTypeIsEmptyInterface := keyType.Kind() == Interface && keyType.NumMethod() == 0
+	shouldUnpackInterface := !keyTypeIsEmptyInterface && keyType.Kind() != String && !keyType.isBinary()
 
 	return &MapIter{
-		m:            v,
-		it:           hashmapNewIterator(),
-		keyInterface: isKeyStoredAsInterface,
+		m:                  v,
+		it:                 hashmapNewIterator(),
+		unpackKeyInterface: shouldUnpackInterface,
 	}
 }
 
@@ -1007,8 +1010,8 @@ type MapIter struct {
 	key Value
 	val Value
 
-	valid        bool
-	keyInterface bool
+	valid              bool
+	unpackKeyInterface bool
 }
 
 func (it *MapIter) Key() Value {
@@ -1016,7 +1019,7 @@ func (it *MapIter) Key() Value {
 		panic("reflect.MapIter.Key called on invalid iterator")
 	}
 
-	if it.keyInterface {
+	if it.unpackKeyInterface {
 		intf := *(*interface{})(it.key.value)
 		v := ValueOf(intf)
 		return v
@@ -1063,6 +1066,13 @@ func (v Value) Set(x Value) {
 		xptr = unsafe.Pointer(&value)
 	}
 	memcpy(v.value, xptr, size)
+}
+
+func (v Value) SetZero() {
+	v.checkAddressable()
+	v.checkRO()
+	size := v.typecode.Size()
+	memzero(v.value, size)
 }
 
 func (v Value) SetBool(x bool) {
@@ -1566,6 +1576,9 @@ func (e *ValueError) Error() string {
 //go:linkname memcpy runtime.memcpy
 func memcpy(dst, src unsafe.Pointer, size uintptr)
 
+//go:linkname memzero runtime.memzero
+func memzero(ptr unsafe.Pointer, size uintptr)
+
 //go:linkname alloc runtime.alloc
 func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer
 
@@ -1638,7 +1651,7 @@ func buflen(v Value) (unsafe.Pointer, uintptr) {
 func sliceGrow(buf unsafe.Pointer, oldLen, oldCap, newCap, elemSize uintptr) (unsafe.Pointer, uintptr, uintptr)
 
 // extend slice to hold n new elements
-func (v *Value) extendSlice(n int) {
+func extendSlice(v Value, n int) sliceHeader {
 	if v.Kind() != Slice {
 		panic(&ValueError{Method: "extendSlice", Kind: v.Kind()})
 	}
@@ -1661,14 +1674,11 @@ func (v *Value) extendSlice(n int) {
 		ncap = old.cap
 	}
 
-	newslice := sliceHeader{
+	return sliceHeader{
 		data: nbuf,
 		len:  nlen + uintptr(n),
 		cap:  ncap,
 	}
-
-	v.flags = valueFlagExported
-	v.value = (unsafe.Pointer)(&newslice)
 }
 
 // Append appends the values x to a slice s and returns the resulting slice.
@@ -1678,7 +1688,9 @@ func Append(v Value, x ...Value) Value {
 		panic(&ValueError{Method: "Append", Kind: v.Kind()})
 	}
 	oldLen := v.Len()
-	v.extendSlice(len(x))
+	newslice := extendSlice(v, len(x))
+	v.flags = valueFlagExported
+	v.value = (unsafe.Pointer)(&newslice)
 	for i, xx := range x {
 		v.Index(oldLen + i).Set(xx)
 	}
@@ -1711,6 +1723,27 @@ func AppendSlice(s, t Value) Value {
 		value:    unsafe.Pointer(result),
 		flags:    valueFlagExported,
 	}
+}
+
+// Grow increases the slice's capacity, if necessary, to guarantee space for
+// another n elements. After Grow(n), at least n elements can be appended
+// to the slice without another allocation.
+//
+// It panics if v's Kind is not a Slice or if n is negative or too large to
+// allocate the memory.
+func (v Value) Grow(n int) {
+	v.checkAddressable()
+	if n < 0 {
+		panic("reflect.Grow: negative length")
+	}
+	if v.Kind() != Slice {
+		panic(&ValueError{Method: "Grow", Kind: v.Kind()})
+	}
+	slice := (*sliceHeader)(v.value)
+	newslice := extendSlice(v, n)
+	// Only copy the new data and cap: the len remains unchanged.
+	slice.data = newslice.data
+	slice.cap = newslice.cap
 }
 
 //go:linkname hashmapStringSet runtime.hashmapStringSetUnsafePointer
@@ -1841,6 +1874,17 @@ func (v Value) FieldByName(name string) Value {
 	}
 
 	if field, ok := v.typecode.FieldByName(name); ok {
+		return v.FieldByIndex(field.Index)
+	}
+	return Value{}
+}
+
+func (v Value) FieldByNameFunc(match func(string) bool) Value {
+	if v.Kind() != Struct {
+		panic(&ValueError{"FieldByName", v.Kind()})
+	}
+
+	if field, ok := v.typecode.FieldByNameFunc(match); ok {
 		return v.FieldByIndex(field.Index)
 	}
 	return Value{}
